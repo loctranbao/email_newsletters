@@ -1,6 +1,9 @@
 
 use std::net::TcpListener;
+use sqlx::{PgPool};
 use zero2prod::startup::run;
+use zero2prod::configuration::get_configuration;
+
 /*
     asynchronous runtime for webserver
     we use tokio to generate the run time for our webserver
@@ -13,8 +16,15 @@ use zero2prod::startup::run;
  */
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:8000")?;
-    run(listener)?.await
+
+    let configuration = get_configuration().expect("failed to read configuration");
+    let address = format!("127.0.0.1:{}", configuration.application_port);
+    let connection_pool = PgPool::connect(&configuration.database.connection_string())
+        .await
+        .expect("failed to connect to posgres");
+    
+    let listener = TcpListener::bind(address)?;
+    run(listener, connection_pool)?.await
 }
 
 

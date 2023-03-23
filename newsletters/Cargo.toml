@@ -25,5 +25,13 @@ sqlx = { version = "0.6.2", default-features = false, features = [ "runtime-acti
 "uuid",
 "chrono",
 "migrate" ] }
+config = "0.11"
 
+chrono = "0.4.15"
+
+[dependencies.uuid]
+version = "1.3.0"
+features = [
+    "v4",                # Lets you generate random UUIDs
+]
 
