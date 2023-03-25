@@ -1,6 +1,7 @@
 
 use std::net::TcpListener;
 use sqlx::{PgPool};
+use  env_logger::Env;
 use zero2prod::startup::run;
 use zero2prod::configuration::get_configuration;
 
@@ -17,6 +18,11 @@ use zero2prod::configuration::get_configuration;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
 
+    // `init` does call `set_logger`, so this is all we need to do.
+    // We are falling back to printing all logs at info-level or above
+    // if the RUST_LOG environment variable has not been set.
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();    
+
     let configuration = get_configuration().expect("failed to read configuration");
     let address = format!("127.0.0.1:{}", configuration.application_port);
     let connection_pool = PgPool::connect(&configuration.database.connection_string())
@@ -26,25 +32,3 @@ async fn main() -> std::io::Result<()> {
     let listener = TcpListener::bind(address)?;
     run(listener, connection_pool)?.await
 }
-
-
-//  this is the code tokio generated behind the scene look like
-/*
-    fn main() -> std::io::Result<()> {
-        let body = async move {
-        HttpServer::new(|| {
-        App::new()
-        .route("/", web::get().to(greet))
-        .route("/{name}", web::get().to(greet))
-        })
-        .bind("127.0.0.1:8000")?
-        .run()
-        .await
-        };
-        tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .expect("Failed building the Runtime")
-        .block_on(body)
-        }
- */

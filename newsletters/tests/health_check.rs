@@ -115,7 +115,7 @@ async fn spawn_app() -> TestApp {
     // 'PgConnection::connect' - it is not an inherent method of the struct!
     let connection_pool = configure_database(&configuration.database).await;
 
-// We retrieve the port assigned to us by the OS
+    // We retrieve the port assigned to us by the OS
     let port = listener.local_addr().unwrap().port();
     let server = zero2prod::startup::run(listener, connection_pool.clone()).expect("Failed to bind address");
     let address = format!("http://127.0.0.1:{}", port);

@@ -2,6 +2,7 @@ use std::{net::TcpListener};
 use actix_web::{web, HttpServer, App, dev::Server};
 use sqlx::{PgPool};
 use crate::routes::{health_check, subscriptions};
+use actix_web::middleware::Logger;
 
 /*
     Create http web server with contain an app
@@ -13,6 +14,7 @@ pub fn run(listener: TcpListener, db_pool: PgPool) -> std::io::Result<Server> {
 
     let server = HttpServer::new(move || {
         App::new()
+            .wrap(Logger::default())
             .route("/health_check", web::get().to(health_check))
             .route("/subscriptions", web::post().to(subscriptions))
             // register the connection as part of the application state
