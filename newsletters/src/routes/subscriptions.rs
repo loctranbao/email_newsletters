@@ -1,5 +1,6 @@
 use actix_web::{Responder, HttpResponse, web};
 use sqlx::{PgPool};
+use tracing::Instrument;
 use uuid::Uuid;
 use chrono::Utc;
 
@@ -14,8 +15,29 @@ pub struct FormData {
  */
 pub async fn subscriptions(form : actix_web::web::Form<FormData>,
     pool: web::Data<PgPool>) -> impl Responder{
+    let request_id = Uuid::new_v4();
 
-    log::info!("saving new subscriber details in the database");
+    let request_span = tracing::info_span!(
+        "adding new subscriber.",
+        %request_id,
+        subscriber_email = %form.email,
+        subscriber_name = %form.name
+    );
+
+    // Using `enter` in an async function is a recipe for disaster!
+    // Bear with me for now, but don't do this at home.
+    // See the following section on `Instrumenting Futures`    
+    let _request_span_guard = request_span.enter();
+
+    tracing::info!("saving new subscriber details in the database");
+
+    // We do not call `.enter` on query_span!
+    // `.instrument` takes care of it at the right moments
+    // in the query future lifetime
+    let query_span = tracing::info_span!(
+        "saving new subscriber details in the database"
+    );
+
     match sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
@@ -29,15 +51,19 @@ pub async fn subscriptions(form : actix_web::web::Form<FormData>,
         // We use `get_ref` to get an immutable reference to the `PgConnection`
         // wrapped by `web::Data`.
         .execute(pool.get_ref())
+        .instrument(query_span)
         .await {
             Ok(_) => {
-                log::info!("new subscriber details have been saved");
+                tracing::info!("new subscriber details have been saved");
                 HttpResponse::Ok().finish()
             },
             Err(e) => {
-                log::error!("Failed to execute query: {:?}", e);
+                tracing::error!("Failed to execute query: {:?}", e);
                 HttpResponse::InternalServerError().finish()
             }
         }
+
+    // `_request_span_guard` is dropped at the end of `subscribe`
+    // That's when we "exit" the span
     
 }
