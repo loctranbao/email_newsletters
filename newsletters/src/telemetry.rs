@@ -1,8 +1,8 @@
 use tracing::Subscriber;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
-use tracing::subscriber::{set_global_default};
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry, fmt::MakeWriter};
+use tracing::subscriber::set_global_default;
 
 /// Compose multiple layers into a tracing's subscriber
 /// 
@@ -15,10 +15,19 @@ use tracing::subscriber::{set_global_default};
 /// We need to explicitly call out that the returned subscriber is 
 /// Send and sync to make it possible to pass it to 'init_subcriber'
 /// later on
-pub fn get_subscriber(
+pub fn get_subscriber<Sink>(
     name: String,
-    filter: String
-) -> impl Subscriber + Sync + Send {
+    filter: String,
+    sink: Sink    
+) -> impl Subscriber + Sync + Send 
+    where 
+        // This "weird" syntax is a higher-ranked trait bound (HRTB)
+        // It basically means that Sink implements the `MakeWriter`
+        // trait for all choices of the lifetime parameter `'a`
+        // Check out https://doc.rust-lang.org/nomicon/hrtb.html
+        // for more details.
+        Sink: for<'a> MakeWriter<'a> + Send + Sync + 'static,
+{
     //  We are falling back to printing all spans at info-level or above
     //  if the RUST_LOG environment variable has not been set.
     let env_filter = EnvFilter::try_from_default_env()
@@ -27,7 +36,7 @@ pub fn get_subscriber(
     let formating_layer = BunyanFormattingLayer::new(
         name,
         //  Output the formatter spans to stdout.
-        std::io::stdout
+        sink
     );
 
     Registry::default()

@@ -1,6 +1,5 @@
 use actix_web::{Responder, HttpResponse, web};
-use sqlx::{PgPool};
-use tracing::Instrument;
+use sqlx::PgPool;
 use uuid::Uuid;
 use chrono::Utc;
 
@@ -10,35 +9,37 @@ pub struct FormData {
     name  : String
 }
 
-/*
-    handler to process user subscribe to newsletters
- */
-pub async fn subscriptions(form : actix_web::web::Form<FormData>,
-    pool: web::Data<PgPool>) -> impl Responder{
-    let request_id = Uuid::new_v4();
 
-    let request_span = tracing::info_span!(
-        "adding new subscriber.",
-        %request_id,
+#[tracing::instrument(
+    name = "Adding a new subscriber",
+    skip(form, pool),
+    fields(
+        request_id = %Uuid::new_v4(),
         subscriber_email = %form.email,
         subscriber_name = %form.name
-    );
+    )
+)]
+pub async fn subscriptions(
+    form : actix_web::web::Form<FormData>,
+    pool: web::Data<PgPool>
+) -> impl Responder{
 
-    // Using `enter` in an async function is a recipe for disaster!
-    // Bear with me for now, but don't do this at home.
-    // See the following section on `Instrumenting Futures`    
-    let _request_span_guard = request_span.enter();
+    match insert_subscriber(&pool, &form).await {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish()
+    }
+    
+}
 
-    tracing::info!("saving new subscriber details in the database");
-
-    // We do not call `.enter` on query_span!
-    // `.instrument` takes care of it at the right moments
-    // in the query future lifetime
-    let query_span = tracing::info_span!(
-        "saving new subscriber details in the database"
-    );
-
-    match sqlx::query!(
+#[tracing::instrument(
+    name = "saving new subscriber to the database",
+    skip(pool, form),
+)]
+pub async fn insert_subscriber(
+    pool: &PgPool,
+    form: &FormData
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
         r#"
         INSERT INTO subscriptions (id, email, name, subscribed_at)
         VALUES ($1, $2, $3, $4)
@@ -50,20 +51,12 @@ pub async fn subscriptions(form : actix_web::web::Form<FormData>,
         )
         // We use `get_ref` to get an immutable reference to the `PgConnection`
         // wrapped by `web::Data`.
-        .execute(pool.get_ref())
-        .instrument(query_span)
-        .await {
-            Ok(_) => {
-                tracing::info!("new subscriber details have been saved");
-                HttpResponse::Ok().finish()
-            },
-            Err(e) => {
-                tracing::error!("Failed to execute query: {:?}", e);
-                HttpResponse::InternalServerError().finish()
-            }
-        }
+        .execute(pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("failed to execute query: {:?}", e);
+            e
+        })?;
 
-    // `_request_span_guard` is dropped at the end of `subscribe`
-    // That's when we "exit" the span
-    
+    Ok(())   
 }
