@@ -31,7 +31,7 @@ async fn health_check_works() {
 
     // Assert
     assert!(response.status().is_success());
-    assert_eq!(Some(0), response.content_length());                            
+    assert_eq!(Some(0), response.content_length());
 }
 
 
@@ -39,7 +39,7 @@ async fn health_check_works() {
 async fn subscribe_returns_a_200_for_valid_form_data() {
     // Arrange
     let app = spawn_app().await;
-    
+
     // Act
     let client = reqwest::Client::new();
     let body = "name=chenlog&email=loc.tranbao%40outlook.com";
@@ -64,7 +64,7 @@ async fn subscribe_returns_a_200_for_valid_form_data() {
 }
 
 #[tokio::test]
-async fn subscribe_returns_a_400_for_invalid_when_data_is_missing() {
+async fn subscribe_returns_a_400_for_invalid_when_data_is_invalid() {
     //Arrange
     let app = spawn_app().await;
     let client = reqwest::Client::new();
@@ -90,9 +90,39 @@ async fn subscribe_returns_a_400_for_invalid_when_data_is_missing() {
                 response.status().as_u16(),
                 "The API did not fail with 400 bad request when the payload was {}",
                 error_message
-            );        
+            );
     }
 
+}
+
+#[tokio::test]
+async fn subscribe_returns_a_200_when_fields_are_present_but_empty() {
+    // Arrange
+    let app = spawn_app().await;
+    let client = reqwest::Client::new();
+    let test_cases = vec![
+        ("name=&email=ursula_le_guin%40gmail.com", "empty name"),
+        ("name=Ursula&email=", "empty email"),
+        ("name=Ursula&email=definitely-not-an-email", "invalid email"),
+    ];
+    for (body, description) in test_cases {
+        // Act
+        let response = client
+            .post(&format!("{}/subscriptions", &app.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute request.");
+
+        // Assert
+        assert_eq!(
+            400,
+            response.status().as_u16(),
+            "The API did not return a 200 OK when the payload was {}.",
+            description
+            );
+    }
 }
 
 //  Ensure that the tracing stack is only initlalised once using once_cell
@@ -109,7 +139,7 @@ static TRACING: Lazy<()> = Lazy::new(|| {
         init_subscriber(subscriber);
     } else {
         let subscriber = get_subscriber(subscriber_name, default_filter_level, std::io::sink);
-        init_subscriber(subscriber);        
+        init_subscriber(subscriber);
     }
 });
 
@@ -132,7 +162,7 @@ async fn spawn_app() -> TestApp {
 
     let mut configuration = get_configuration().expect("failed to read configuration");
     configuration.database.database_name = Uuid::new_v4().to_string();
-    
+
     // the 'Connection' trait MUST be in scope for us to invoke
     // 'PgConnection::connect' - it is not an inherent method of the struct!
     let connection_pool = configure_database(&configuration.database).await;
